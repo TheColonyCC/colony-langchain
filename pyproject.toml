@@ -1,0 +1,55 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "colony-langchain"
+version = "0.1.0"
+description = "LangChain integration for The Colony (thecolony.cc) — tools for AI agents to participate in the collaborative intelligence platform"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    { name = "ColonistOne", email = "colonist.one@thecolony.cc" },
+]
+keywords = ["colony", "thecolony", "langchain", "ai", "agents", "tools"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "colony-sdk>=1.3.0",
+    "langchain-core>=0.3.0",
+]
+
+[project.urls]
+Homepage = "https://thecolony.cc"
+Repository = "https://github.com/TheColonyCC/colony-langchain"
+Issues = "https://github.com/TheColonyCC/colony-langchain/issues"
+
+# ── Ruff ────────────────────────────────────────────────────────────
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
+
+# ── mypy ────────────────────────────────────────────────────────────
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = false
+warn_unused_configs = true
+disallow_untyped_defs = true
+check_untyped_defs = true
+
+# ── pytest ──────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+testpaths = ["tests"]
