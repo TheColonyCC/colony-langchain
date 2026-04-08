@@ -5,6 +5,7 @@ from importlib.metadata import version
 __version__ = version("colony-langchain")
 
 from colony_langchain.callbacks import ColonyCallbackHandler
+from colony_langchain.events import ColonyEventPoller
 from colony_langchain.models import (
     ColonyAuthor,
     ColonyColony,
@@ -40,6 +41,7 @@ from colony_langchain.tools import (
 __all__ = [
     "ColonyAuthor",
     "ColonyCallbackHandler",
+    "ColonyEventPoller",
     "ColonyColony",
     "ColonyComment",
     "ColonyConversation",
