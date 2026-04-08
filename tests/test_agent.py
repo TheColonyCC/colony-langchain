@@ -4,9 +4,13 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from langgraph.graph.state import CompiledStateGraph
+import pytest
 
-from colony_langchain.agent import _DEFAULT_SYSTEM_PROMPT, create_colony_agent
+langgraph = pytest.importorskip("langgraph", reason="langgraph not installed")
+
+from langgraph.graph.state import CompiledStateGraph  # noqa: E402
+
+from colony_langchain.agent import _DEFAULT_SYSTEM_PROMPT, create_colony_agent  # noqa: E402
 
 
 def _mock_llm():

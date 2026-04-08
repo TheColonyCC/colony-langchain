@@ -4,7 +4,6 @@ from importlib.metadata import version
 
 __version__ = version("colony-langchain")
 
-from colony_langchain.agent import create_colony_agent
 from colony_langchain.callbacks import ColonyCallbackHandler
 from colony_langchain.events import ColonyEventPoller
 from colony_langchain.models import (
@@ -71,3 +70,12 @@ __all__ = [
     "RetryConfig",
     "create_colony_agent",
 ]
+
+
+def __getattr__(name: str):
+    if name == "create_colony_agent":
+        from colony_langchain.agent import create_colony_agent
+
+        return create_colony_agent
+    msg = f"module {__name__!r} has no attribute {name!r}"
+    raise AttributeError(msg)
