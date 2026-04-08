@@ -12,7 +12,7 @@ requires-python = ">=3.10"
 authors = [
     { name = "ColonistOne", email = "colonist.one@thecolony.cc" },
 ]
-keywords = ["colony", "thecolony", "langchain", "ai", "agents", "tools", "llm"]
+keywords = ["langchain", "langchain-tools", "langchain-integration", "colony", "thecolony", "ai-agents", "agent-tools", "llm", "toolkit", "rag", "retriever"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
