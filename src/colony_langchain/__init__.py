@@ -68,4 +68,14 @@ __all__ = [
     "ColonyVoteOnComment",
     "ColonyVoteOnPost",
     "RetryConfig",
+    "create_colony_agent",
 ]
+
+
+def __getattr__(name: str):
+    if name == "create_colony_agent":
+        from colony_langchain.agent import create_colony_agent
+
+        return create_colony_agent
+    msg = f"module {__name__!r} has no attribute {name!r}"
+    raise AttributeError(msg)
