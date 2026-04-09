@@ -131,17 +131,21 @@ class TestAsyncToolkit:
     def test_get_tools_returns_all(self) -> None:
         toolkit = AsyncColonyToolkit(api_key="col_test")
         tools = toolkit.get_tools()
-        assert len(tools) == 16
+        assert len(tools) == 27
         names = {t.name for t in tools}
         assert "colony_create_post" in names
         assert "colony_search_posts" in names
+        assert "colony_follow_user" in names
+        assert "colony_create_webhook" in names
 
     def test_get_tools_read_only(self) -> None:
         toolkit = AsyncColonyToolkit(api_key="col_test", read_only=True)
         tools = toolkit.get_tools()
-        assert len(tools) == 7
+        assert len(tools) == 9
         names = {t.name for t in tools}
         assert "colony_create_post" not in names
+        assert "colony_get_poll" in names
+        assert "colony_get_webhooks" in names
 
     def test_get_tools_include(self) -> None:
         toolkit = AsyncColonyToolkit(api_key="col_test")
@@ -151,7 +155,7 @@ class TestAsyncToolkit:
     def test_get_tools_exclude(self) -> None:
         toolkit = AsyncColonyToolkit(api_key="col_test")
         tools = toolkit.get_tools(exclude=["colony_create_post"])
-        assert len(tools) == 15
+        assert len(tools) == 26
         names = {t.name for t in tools}
         assert "colony_create_post" not in names
 
@@ -168,7 +172,7 @@ class TestAsyncToolkit:
     async def test_async_context_manager(self) -> None:
         async with AsyncColonyToolkit(api_key="col_test") as toolkit:
             tools = toolkit.get_tools()
-            assert len(tools) == 16
+            assert len(tools) == 27
 
     async def test_aclose(self) -> None:
         toolkit = AsyncColonyToolkit(api_key="col_test")
@@ -288,23 +292,20 @@ class TestRetrieverNativeAsync:
     async def test_retriever_with_sync_client_uses_thread(self) -> None:
         """Passing a sync ``ColonyClient`` (or a MagicMock) — ``ainvoke``
         falls back to ``to_thread`` so it doesn't block the event loop."""
+        sync_post = {
+            "id": "p1",
+            "title": "Hello",
+            "post_type": "discussion",
+            "author": {"username": "bot"},
+            "score": 1,
+            "comment_count": 0,
+            "colony": {"name": "g"},
+            "body": "x",
+        }
         sync_client = MagicMock()
-        sync_client.get_posts = MagicMock(
-            return_value={
-                "posts": [
-                    {
-                        "id": "p1",
-                        "title": "Hello",
-                        "post_type": "discussion",
-                        "author": {"username": "bot"},
-                        "score": 1,
-                        "comment_count": 0,
-                        "colony": {"name": "g"},
-                        "body": "x",
-                    }
-                ]
-            }
-        )
+        # iter_posts is a sync generator function — return a fresh iterator
+        # on each call so multiple invocations of the retriever still work.
+        sync_client.iter_posts = MagicMock(side_effect=lambda **_kw: iter([sync_post]))
         retriever = ColonyRetriever(client=sync_client)
         with patch("asyncio.to_thread", wraps=asyncio.to_thread) as mock_to_thread:
             docs = await retriever.ainvoke("hello")

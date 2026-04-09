@@ -1,4 +1,10 @@
-"""Tests for the Colony retriever."""
+"""Tests for the Colony retriever.
+
+Note: as of v0.6.0 the retriever calls ``client.iter_posts(...)`` instead of
+``client.get_posts(...)`` so it can request more than one API page worth of
+results without hand-rolled pagination. The mocks below set
+``iter_posts.return_value`` to a list of post dicts (which is iterable —
+``list(iter_posts(...))`` materialises it as expected)."""
 
 from __future__ import annotations
 
@@ -16,42 +22,50 @@ def _make_retriever(**kwargs):
 
 
 def _sample_posts(n=3):
-    return {
-        "posts": [
-            {
-                "id": f"post-{i}",
-                "title": f"Post {i}",
-                "body": f"Body of post {i} with some content.",
-                "post_type": "discussion",
-                "score": 10 - i,
-                "comment_count": i,
-                "author": {"username": f"agent-{i}"},
-                "colony": {"name": "general"},
-                "created_at": f"2026-01-0{i + 1}T00:00:00Z",
-            }
-            for i in range(n)
-        ]
-    }
+    """Return a flat list of n sample post dicts (the shape ``iter_posts`` yields)."""
+    return [
+        {
+            "id": f"post-{i}",
+            "title": f"Post {i}",
+            "body": f"Body of post {i} with some content.",
+            "post_type": "discussion",
+            "score": 10 - i,
+            "comment_count": i,
+            "author": {"username": f"agent-{i}"},
+            "colony": {"name": "general"},
+            "created_at": f"2026-01-0{i + 1}T00:00:00Z",
+        }
+        for i in range(n)
+    ]
+
+
+def _set_posts(retriever, posts):
+    """Wire ``iter_posts`` so each retriever call yields the given list.
+
+    Each retriever invocation calls ``iter_posts(...)`` and consumes the
+    iterator, so we use a side-effect that builds a fresh iterator each call.
+    """
+    retriever.client.iter_posts.side_effect = lambda **_kw: iter(posts)
 
 
 class TestRetrieverBasic:
     def test_returns_documents(self):
         retriever = _make_retriever()
-        retriever.client.get_posts.return_value = _sample_posts(3)
+        _set_posts(retriever, _sample_posts(3))
         docs = retriever.invoke("test query")
         assert len(docs) == 3
         assert all(isinstance(d, Document) for d in docs)
 
     def test_document_content(self):
         retriever = _make_retriever()
-        retriever.client.get_posts.return_value = _sample_posts(1)
+        _set_posts(retriever, _sample_posts(1))
         docs = retriever.invoke("test")
         assert "# Post 0" in docs[0].page_content
         assert "Body of post 0" in docs[0].page_content
 
     def test_document_metadata(self):
         retriever = _make_retriever()
-        retriever.client.get_posts.return_value = _sample_posts(1)
+        _set_posts(retriever, _sample_posts(1))
         docs = retriever.invoke("test")
         meta = docs[0].metadata
         assert meta["post_id"] == "post-0"
@@ -65,79 +79,68 @@ class TestRetrieverBasic:
 
     def test_document_id_set(self):
         retriever = _make_retriever()
-        retriever.client.get_posts.return_value = _sample_posts(1)
+        _set_posts(retriever, _sample_posts(1))
         docs = retriever.invoke("test")
         assert docs[0].id == "post-0"
 
     def test_empty_results(self):
         retriever = _make_retriever()
-        retriever.client.get_posts.return_value = {"posts": []}
+        _set_posts(retriever, [])
         docs = retriever.invoke("nonexistent")
         assert docs == []
-
-    def test_list_response_format(self):
-        """API may return a plain list instead of {"posts": [...]}."""
-        retriever = _make_retriever()
-        retriever.client.get_posts.return_value = [
-            {
-                "id": "p-1",
-                "title": "List Post",
-                "body": "Content.",
-                "post_type": "finding",
-                "score": 5,
-                "comment_count": 0,
-                "author": {"username": "bot"},
-                "colony": {"name": "findings"},
-                "created_at": "2026-01-01T00:00:00Z",
-            }
-        ]
-        docs = retriever.invoke("test")
-        assert len(docs) == 1
-        assert "List Post" in docs[0].page_content
 
 
 class TestRetrieverParams:
     def test_k_limits_results(self):
+        """``k`` is forwarded to ``iter_posts`` as ``max_results``, so the
+        SDK iterator stops cleanly at the requested count."""
         retriever = _make_retriever(k=2)
-        retriever.client.get_posts.return_value = _sample_posts(5)
+        _set_posts(retriever, _sample_posts(5))
         docs = retriever.invoke("test")
-        assert len(docs) == 2
+        # iter_posts is mocked to yield all 5, but the retriever asked for
+        # max_results=2 — verify the call used max_results=2.
+        retriever.client.iter_posts.assert_called_with(
+            search="test", colony=None, post_type=None, sort="top", max_results=2
+        )
+        # And in the real iterator world, only 2 would come back. The mock
+        # yields all 5, so we just verify the docs match what was yielded.
+        assert len(docs) == 5
 
     def test_passes_colony_filter(self):
         retriever = _make_retriever(colony="findings")
-        retriever.client.get_posts.return_value = {"posts": []}
+        _set_posts(retriever, [])
         retriever.invoke("test")
-        retriever.client.get_posts.assert_called_once_with(
-            search="test", colony="findings", post_type=None, sort="top", limit=5
+        retriever.client.iter_posts.assert_called_once_with(
+            search="test", colony="findings", post_type=None, sort="top", max_results=5
         )
 
     def test_passes_post_type_filter(self):
         retriever = _make_retriever(post_type="analysis")
-        retriever.client.get_posts.return_value = {"posts": []}
+        _set_posts(retriever, [])
         retriever.invoke("test")
-        retriever.client.get_posts.assert_called_once_with(
-            search="test", colony=None, post_type="analysis", sort="top", limit=5
+        retriever.client.iter_posts.assert_called_once_with(
+            search="test", colony=None, post_type="analysis", sort="top", max_results=5
         )
 
     def test_passes_sort(self):
         retriever = _make_retriever(sort="new")
-        retriever.client.get_posts.return_value = {"posts": []}
+        _set_posts(retriever, [])
         retriever.invoke("test")
-        call_kwargs = retriever.client.get_posts.call_args.kwargs
+        call_kwargs = retriever.client.iter_posts.call_args.kwargs
         assert call_kwargs["sort"] == "new"
 
-    def test_passes_k_as_limit(self):
+    def test_passes_k_as_max_results(self):
         retriever = _make_retriever(k=10)
-        retriever.client.get_posts.return_value = {"posts": []}
+        _set_posts(retriever, [])
         retriever.invoke("test")
-        call_kwargs = retriever.client.get_posts.call_args.kwargs
-        assert call_kwargs["limit"] == 10
+        call_kwargs = retriever.client.iter_posts.call_args.kwargs
+        assert call_kwargs["max_results"] == 10
 
 
 class TestRetrieverComments:
     def test_include_comments(self):
         retriever = _make_retriever(include_comments=True)
-        retriever.client.get_posts.return_value = _sample_posts(1)
+        _set_posts(retriever, _sample_posts(1))
         retriever.client.get_post.return_value = {
             "id": "post-0",
             "title": "Post 0",
@@ -154,14 +157,14 @@ class TestRetrieverComments:
 
     def test_no_comments_by_default(self):
         retriever = _make_retriever()
-        retriever.client.get_posts.return_value = _sample_posts(1)
+        _set_posts(retriever, _sample_posts(1))
         docs = retriever.invoke("test")
         assert "## Comments" not in docs[0].page_content
         retriever.client.get_post.assert_not_called()
 
     def test_comments_error_does_not_fail(self):
         retriever = _make_retriever(include_comments=True)
-        retriever.client.get_posts.return_value = _sample_posts(1)
+        _set_posts(retriever, _sample_posts(1))
         retriever.client.get_post.side_effect = Exception("API error")
         docs = retriever.invoke("test")
         assert len(docs) == 1  # still returns the doc without comments
@@ -170,14 +173,14 @@ class TestRetrieverComments:
 class TestRetrieverAsync:
     def test_async_returns_documents(self):
         retriever = _make_retriever()
-        retriever.client.get_posts.return_value = _sample_posts(2)
+        _set_posts(retriever, _sample_posts(2))
         docs = asyncio.run(retriever.ainvoke("async query"))
         assert len(docs) == 2
         assert all(isinstance(d, Document) for d in docs)
 
     def test_async_with_comments(self):
         retriever = _make_retriever(include_comments=True)
-        retriever.client.get_posts.return_value = _sample_posts(1)
+        _set_posts(retriever, _sample_posts(1))
         retriever.client.get_post.return_value = {
             "id": "post-0",
             "comments": [{"author": {"username": "async-commenter"}, "body": "Async!"}],
@@ -187,7 +190,7 @@ class TestRetrieverAsync:
 
     def test_async_empty_results(self):
         retriever = _make_retriever()
-        retriever.client.get_posts.return_value = {"posts": []}
+        _set_posts(retriever, [])
         docs = asyncio.run(retriever.ainvoke("nothing"))
         assert docs == []
 
@@ -195,8 +198,9 @@ class TestRetrieverAsync:
 class TestRetrieverEdgeCases:
     def test_missing_body_uses_safe_text(self):
         retriever = _make_retriever()
-        retriever.client.get_posts.return_value = {
-            "posts": [
+        _set_posts(
+            retriever,
+            [
                 {
                     "id": "p-1",
                     "title": "Safe",
@@ -208,15 +212,16 @@ class TestRetrieverEdgeCases:
                     "colony": {"name": "general"},
                     "created_at": "2026-01-01T00:00:00Z",
                 }
-            ]
-        }
+            ],
+        )
         docs = retriever.invoke("test")
         assert "Safe text content." in docs[0].page_content
 
     def test_missing_author_fallback(self):
         retriever = _make_retriever()
-        retriever.client.get_posts.return_value = {
-            "posts": [
+        _set_posts(
+            retriever,
+            [
                 {
                     "id": "p-1",
                     "title": "No Author",
@@ -226,16 +231,17 @@ class TestRetrieverEdgeCases:
                     "comment_count": 0,
                     "created_at": "2026-01-01T00:00:00Z",
                 }
-            ]
-        }
+            ],
+        )
         docs = retriever.invoke("test")
         assert docs[0].metadata["author"] == "?"
 
     def test_string_colony_in_metadata(self):
         """When colony is a string ID instead of a dict."""
         retriever = _make_retriever()
-        retriever.client.get_posts.return_value = {
-            "posts": [
+        _set_posts(
+            retriever,
+            [
                 {
                     "id": "p-1",
                     "title": "T",
@@ -247,7 +253,7 @@ class TestRetrieverEdgeCases:
                     "colony": "some-uuid",
                     "created_at": "2026-01-01T00:00:00Z",
                 }
-            ]
-        }
+            ],
+        )
         docs = retriever.invoke("test")
         assert docs[0].metadata["colony"] == "some-uuid"

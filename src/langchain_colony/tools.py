@@ -9,6 +9,7 @@ from typing import Any, TypeVar
 
 from colony_sdk import ColonyAPIError
 from colony_sdk import RetryConfig as RetryConfig  # re-export for langchain_colony.tools.RetryConfig
+from colony_sdk import verify_webhook as verify_webhook  # re-export
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
 
@@ -691,3 +692,440 @@ class ColonyUpdateProfile(_ColonyBaseTool):
         if isinstance(result, str):
             return result
         return f"Profile updated: {', '.join(fields.keys())}"
+
+
+# ── SDK 1.4.0 surface — input schemas ───────────────────────────────
+
+
+class FollowUserInput(BaseModel):
+    user_id: str = Field(description="UUID of the user to follow")
+
+
+class UnfollowUserInput(BaseModel):
+    user_id: str = Field(description="UUID of the user to unfollow")
+
+
+class ReactToPostInput(BaseModel):
+    post_id: str = Field(description="UUID of the post to react to")
+    emoji: str = Field(description="Emoji to react with. Common values: '👍', '❤️', '🎉', '🤔', '👀', '🚀'.")
+
+
+class ReactToCommentInput(BaseModel):
+    comment_id: str = Field(description="UUID of the comment to react to")
+    emoji: str = Field(description="Emoji to react with. Common values: '👍', '❤️', '🎉', '🤔', '👀', '🚀'.")
+
+
+class GetPollInput(BaseModel):
+    post_id: str = Field(description="UUID of the poll post")
+
+
+class VotePollInput(BaseModel):
+    post_id: str = Field(description="UUID of the poll post")
+    option_id: str = Field(
+        description="UUID of the option to vote for. Use colony_get_poll first to discover the option IDs."
+    )
+
+
+class JoinColonyInput(BaseModel):
+    colony: str = Field(description="Colony name (e.g. 'findings', 'crypto', 'art') or UUID to join.")
+
+
+class LeaveColonyInput(BaseModel):
+    colony: str = Field(description="Colony name or UUID to leave.")
+
+
+class CreateWebhookInput(BaseModel):
+    url: str = Field(description="HTTPS URL to deliver webhook events to")
+    events: list[str] = Field(
+        description=(
+            "List of event types to subscribe to. Supported events: post_created, "
+            "comment_created, bid_received, bid_accepted, payment_received, "
+            "direct_message, mention, task_matched, tip_received."
+        )
+    )
+    secret: str = Field(description="Shared secret used to HMAC-sign webhook deliveries (min 16 chars)")
+
+
+class DeleteWebhookInput(BaseModel):
+    webhook_id: str = Field(description="UUID of the webhook to delete")
+
+
+class VerifyWebhookInput(BaseModel):
+    payload: str = Field(description="Raw request body as received (string or bytes-decoded)")
+    signature: str = Field(
+        description=(
+            "Value of the X-Colony-Signature header. A leading 'sha256=' prefix is "
+            "tolerated for frameworks that normalise that way."
+        )
+    )
+    secret: str = Field(description="The shared secret you supplied when registering the webhook")
+
+
+# ── Output formatters for new surfaces ──────────────────────────────
+
+
+def _format_poll(data: Any) -> str:
+    """Format a poll-results response."""
+    if not isinstance(data, dict):
+        return str(data)
+    options = data.get("options", [])
+    total = data.get("total_votes", sum(o.get("votes", 0) for o in options))
+    lines = [f"Poll ({total} total votes):"]
+    for o in options:
+        label = o.get("text", o.get("label", "?"))
+        votes = o.get("votes", 0)
+        oid = o.get("id", "")
+        lines.append(f"  [{oid}] {label}: {votes} votes")
+    return "\n".join(lines)
+
+
+def _format_webhooks(data: Any) -> str:
+    """Format a webhooks list."""
+    if isinstance(data, dict):
+        webhooks = data.get("webhooks", [])
+    elif isinstance(data, list):
+        webhooks = data
+    else:
+        return str(data)
+    if not webhooks:
+        return "No webhooks registered."
+    lines = []
+    for w in webhooks:
+        wid = w.get("id", "")
+        url = w.get("url", "")
+        events = ", ".join(w.get("events", []))
+        lines.append(f"[{wid}] {url} — events: {events}")
+    return "\n".join(lines)
+
+
+def _format_simple_ok(data: Any, default: str = "OK") -> str:
+    """Format a simple action response (follow/unfollow/join/react/vote etc)."""
+    if isinstance(data, dict):
+        parts = []
+        for key in ("id", "message", "status"):
+            if key in data:
+                parts.append(f"{key}: {data[key]}")
+        if parts:
+            return "OK — " + ", ".join(parts)
+    return default
+
+
+# ── Social graph: follow / unfollow ─────────────────────────────────
+
+
+class ColonyFollowUser(_ColonyBaseTool):
+    """Follow another agent on The Colony."""
+
+    name: str = "colony_follow_user"
+    description: str = "Follow another agent on The Colony so you see their posts in your feed. Pass the user UUID."
+    args_schema: type[BaseModel] = FollowUserInput
+    metadata: dict[str, Any] = {"provider": "thecolony.cc", "category": "users", "operation": "follow"}
+    tags: list[str] = ["colony", "write", "users"]
+
+    def _run(self, user_id: str) -> str:
+        result = self._api(self.client.follow, user_id)
+        if isinstance(result, str):
+            return result
+        return _format_simple_ok(result, default=f"Followed user {user_id}.")
+
+    async def _arun(self, user_id: str) -> str:
+        result = await self._aapi(self.client.follow, user_id)
+        if isinstance(result, str):
+            return result
+        return _format_simple_ok(result, default=f"Followed user {user_id}.")
+
+
+class ColonyUnfollowUser(_ColonyBaseTool):
+    """Unfollow another agent on The Colony."""
+
+    name: str = "colony_unfollow_user"
+    description: str = "Unfollow an agent on The Colony. Pass the user UUID."
+    args_schema: type[BaseModel] = UnfollowUserInput
+    metadata: dict[str, Any] = {"provider": "thecolony.cc", "category": "users", "operation": "unfollow"}
+    tags: list[str] = ["colony", "write", "users"]
+
+    def _run(self, user_id: str) -> str:
+        result = self._api(self.client.unfollow, user_id)
+        if isinstance(result, str):
+            return result
+        return _format_simple_ok(result, default=f"Unfollowed user {user_id}.")
+
+    async def _arun(self, user_id: str) -> str:
+        result = await self._aapi(self.client.unfollow, user_id)
+        if isinstance(result, str):
+            return result
+        return _format_simple_ok(result, default=f"Unfollowed user {user_id}.")
+
+
+# ── Reactions ───────────────────────────────────────────────────────
+
+
+class ColonyReactToPost(_ColonyBaseTool):
+    """Add an emoji reaction to a post on The Colony."""
+
+    name: str = "colony_react_to_post"
+    description: str = (
+        "Add an emoji reaction to a post on The Colony. Reactions are toggles — "
+        "calling this again with the same emoji removes the reaction. "
+        "Common emoji: 👍, ❤️, 🎉, 🤔, 👀, 🚀."
+    )
+    args_schema: type[BaseModel] = ReactToPostInput
+    metadata: dict[str, Any] = {"provider": "thecolony.cc", "category": "posts", "operation": "react"}
+    tags: list[str] = ["colony", "write", "posts"]
+
+    def _run(self, post_id: str, emoji: str) -> str:
+        result = self._api(self.client.react_post, post_id, emoji)
+        if isinstance(result, str):
+            return result
+        return _format_simple_ok(result, default=f"Reacted to post {post_id} with {emoji}.")
+
+    async def _arun(self, post_id: str, emoji: str) -> str:
+        result = await self._aapi(self.client.react_post, post_id, emoji)
+        if isinstance(result, str):
+            return result
+        return _format_simple_ok(result, default=f"Reacted to post {post_id} with {emoji}.")
+
+
+class ColonyReactToComment(_ColonyBaseTool):
+    """Add an emoji reaction to a comment on The Colony."""
+
+    name: str = "colony_react_to_comment"
+    description: str = (
+        "Add an emoji reaction to a comment on The Colony. Reactions are toggles — "
+        "calling this again with the same emoji removes the reaction. "
+        "Common emoji: 👍, ❤️, 🎉, 🤔, 👀, 🚀."
+    )
+    args_schema: type[BaseModel] = ReactToCommentInput
+    metadata: dict[str, Any] = {"provider": "thecolony.cc", "category": "comments", "operation": "react"}
+    tags: list[str] = ["colony", "write", "comments"]
+
+    def _run(self, comment_id: str, emoji: str) -> str:
+        result = self._api(self.client.react_comment, comment_id, emoji)
+        if isinstance(result, str):
+            return result
+        return _format_simple_ok(result, default=f"Reacted to comment {comment_id} with {emoji}.")
+
+    async def _arun(self, comment_id: str, emoji: str) -> str:
+        result = await self._aapi(self.client.react_comment, comment_id, emoji)
+        if isinstance(result, str):
+            return result
+        return _format_simple_ok(result, default=f"Reacted to comment {comment_id} with {emoji}.")
+
+
+# ── Polls ───────────────────────────────────────────────────────────
+
+
+class ColonyGetPoll(_ColonyBaseTool):
+    """Get the options and current vote counts for a poll post."""
+
+    name: str = "colony_get_poll"
+    description: str = (
+        "Get the poll options and vote counts for a poll post on The Colony. "
+        "Returns option IDs, labels, and vote counts. Use the option ID with "
+        "colony_vote_poll to vote."
+    )
+    args_schema: type[BaseModel] = GetPollInput
+    metadata: dict[str, Any] = {"provider": "thecolony.cc", "category": "posts", "operation": "get_poll"}
+    tags: list[str] = ["colony", "read", "posts"]
+
+    def _run(self, post_id: str) -> str:
+        data = self._api(self.client.get_poll, post_id)
+        if isinstance(data, str):
+            return data
+        return _format_poll(data)
+
+    async def _arun(self, post_id: str) -> str:
+        data = await self._aapi(self.client.get_poll, post_id)
+        if isinstance(data, str):
+            return data
+        return _format_poll(data)
+
+
+class ColonyVotePoll(_ColonyBaseTool):
+    """Vote on a poll post on The Colony."""
+
+    name: str = "colony_vote_poll"
+    description: str = (
+        "Vote for an option on a poll post on The Colony. Use colony_get_poll first to discover the option IDs."
+    )
+    args_schema: type[BaseModel] = VotePollInput
+    metadata: dict[str, Any] = {"provider": "thecolony.cc", "category": "posts", "operation": "vote_poll"}
+    tags: list[str] = ["colony", "write", "posts"]
+
+    def _run(self, post_id: str, option_id: str) -> str:
+        result = self._api(self.client.vote_poll, post_id, option_id)
+        if isinstance(result, str):
+            return result
+        return _format_simple_ok(result, default=f"Voted for option {option_id}.")
+
+    async def _arun(self, post_id: str, option_id: str) -> str:
+        result = await self._aapi(self.client.vote_poll, post_id, option_id)
+        if isinstance(result, str):
+            return result
+        return _format_simple_ok(result, default=f"Voted for option {option_id}.")
+
+
+# ── Colony membership ───────────────────────────────────────────────
+
+
+class ColonyJoinColony(_ColonyBaseTool):
+    """Join a colony (sub-forum) on The Colony."""
+
+    name: str = "colony_join_colony"
+    description: str = (
+        "Join a colony (sub-forum) on The Colony. Pass a colony name (e.g. 'findings', "
+        "'art', 'crypto') or its UUID. Use colony_list_colonies to discover available colonies."
+    )
+    args_schema: type[BaseModel] = JoinColonyInput
+    metadata: dict[str, Any] = {"provider": "thecolony.cc", "category": "colonies", "operation": "join"}
+    tags: list[str] = ["colony", "write", "colonies"]
+
+    def _run(self, colony: str) -> str:
+        result = self._api(self.client.join_colony, colony)
+        if isinstance(result, str):
+            return result
+        return _format_simple_ok(result, default=f"Joined colony {colony}.")
+
+    async def _arun(self, colony: str) -> str:
+        result = await self._aapi(self.client.join_colony, colony)
+        if isinstance(result, str):
+            return result
+        return _format_simple_ok(result, default=f"Joined colony {colony}.")
+
+
+class ColonyLeaveColony(_ColonyBaseTool):
+    """Leave a colony (sub-forum) on The Colony."""
+
+    name: str = "colony_leave_colony"
+    description: str = "Leave a colony (sub-forum) on The Colony. Pass the colony name or UUID."
+    args_schema: type[BaseModel] = LeaveColonyInput
+    metadata: dict[str, Any] = {"provider": "thecolony.cc", "category": "colonies", "operation": "leave"}
+    tags: list[str] = ["colony", "write", "colonies"]
+
+    def _run(self, colony: str) -> str:
+        result = self._api(self.client.leave_colony, colony)
+        if isinstance(result, str):
+            return result
+        return _format_simple_ok(result, default=f"Left colony {colony}.")
+
+    async def _arun(self, colony: str) -> str:
+        result = await self._aapi(self.client.leave_colony, colony)
+        if isinstance(result, str):
+            return result
+        return _format_simple_ok(result, default=f"Left colony {colony}.")
+
+
+# ── Webhooks ────────────────────────────────────────────────────────
+
+
+class ColonyCreateWebhook(_ColonyBaseTool):
+    """Register a webhook for real-time event notifications."""
+
+    name: str = "colony_create_webhook"
+    description: str = (
+        "Register a webhook on The Colony to receive real-time event notifications. "
+        "Pass an HTTPS URL, a list of event types, and a secret (min 16 chars). "
+        "Events: post_created, comment_created, bid_received, bid_accepted, "
+        "payment_received, direct_message, mention, task_matched, tip_received."
+    )
+    args_schema: type[BaseModel] = CreateWebhookInput
+    metadata: dict[str, Any] = {"provider": "thecolony.cc", "category": "webhooks", "operation": "create"}
+    tags: list[str] = ["colony", "write", "webhooks"]
+
+    def _run(self, url: str, events: list[str], secret: str) -> str:
+        result = self._api(self.client.create_webhook, url, events, secret)
+        if isinstance(result, str):
+            return result
+        wid = result.get("id", "?") if isinstance(result, dict) else "?"
+        return f"Webhook registered: id={wid} url={url} events={','.join(events)}"
+
+    async def _arun(self, url: str, events: list[str], secret: str) -> str:
+        result = await self._aapi(self.client.create_webhook, url, events, secret)
+        if isinstance(result, str):
+            return result
+        wid = result.get("id", "?") if isinstance(result, dict) else "?"
+        return f"Webhook registered: id={wid} url={url} events={','.join(events)}"
+
+
+class ColonyGetWebhooks(_ColonyBaseTool):
+    """List your registered webhooks."""
+
+    name: str = "colony_get_webhooks"
+    description: str = "List all webhooks you have registered on The Colony."
+    args_schema: type[BaseModel] | None = None
+    metadata: dict[str, Any] = {"provider": "thecolony.cc", "category": "webhooks", "operation": "list"}
+    tags: list[str] = ["colony", "read", "webhooks"]
+
+    def _run(self) -> str:
+        data = self._api(self.client.get_webhooks)
+        if isinstance(data, str):
+            return data
+        return _format_webhooks(data)
+
+    async def _arun(self) -> str:
+        data = await self._aapi(self.client.get_webhooks)
+        if isinstance(data, str):
+            return data
+        return _format_webhooks(data)
+
+
+class ColonyDeleteWebhook(_ColonyBaseTool):
+    """Delete one of your registered webhooks."""
+
+    name: str = "colony_delete_webhook"
+    description: str = (
+        "Delete one of your webhooks on The Colony. Use colony_get_webhooks to find the webhook ID first."
+    )
+    args_schema: type[BaseModel] = DeleteWebhookInput
+    metadata: dict[str, Any] = {"provider": "thecolony.cc", "category": "webhooks", "operation": "delete"}
+    tags: list[str] = ["colony", "write", "webhooks"]
+
+    def _run(self, webhook_id: str) -> str:
+        result = self._api(self.client.delete_webhook, webhook_id)
+        if isinstance(result, str):
+            return result
+        return _format_simple_ok(result, default=f"Deleted webhook {webhook_id}.")
+
+    async def _arun(self, webhook_id: str) -> str:
+        result = await self._aapi(self.client.delete_webhook, webhook_id)
+        if isinstance(result, str):
+            return result
+        return _format_simple_ok(result, default=f"Deleted webhook {webhook_id}.")
+
+
+# ── Webhook signature verification ──────────────────────────────────
+
+
+class ColonyVerifyWebhook(_ColonyBaseTool):
+    """Verify the HMAC-SHA256 signature on an incoming Colony webhook.
+
+    Useful for agents that act as webhook receivers — verify the signature
+    *before* trusting the payload. Constant-time comparison via
+    ``hmac.compare_digest`` (delegated to :func:`colony_sdk.verify_webhook`).
+    No client required — pure HMAC, fast enough to run on the event loop.
+    """
+
+    name: str = "colony_verify_webhook"
+    description: str = (
+        "Verify a Colony webhook signature with HMAC-SHA256. Pass the raw request body, "
+        "the value of the X-Colony-Signature header, and the shared secret you supplied "
+        "when registering the webhook. Returns 'OK — signature valid' or 'Error — "
+        "signature invalid'. A leading 'sha256=' prefix on the signature is tolerated."
+    )
+    args_schema: type[BaseModel] = VerifyWebhookInput
+    metadata: dict[str, Any] = {"provider": "thecolony.cc", "category": "webhooks", "operation": "verify"}
+    tags: list[str] = ["colony", "webhooks"]
+
+    # ColonyVerifyWebhook doesn't need a client — override the field default.
+    client: Any = Field(default=None, exclude=True)
+
+    def _run(self, payload: str, signature: str, secret: str) -> str:
+        try:
+            ok = verify_webhook(payload, signature, secret)
+        except Exception as exc:
+            return _friendly_error(exc)
+        return "OK — signature valid" if ok else "Error — signature invalid"
+
+    async def _arun(self, payload: str, signature: str, secret: str) -> str:
+        # Pure CPU-bound HMAC, fast enough to run on the loop directly.
+        return self._run(payload, signature, secret)

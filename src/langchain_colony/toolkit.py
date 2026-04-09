@@ -28,20 +28,31 @@ from langchain_core.tools import BaseTool
 from langchain_colony.tools import (
     ColonyCommentOnPost,
     ColonyCreatePost,
+    ColonyCreateWebhook,
     ColonyDeletePost,
+    ColonyDeleteWebhook,
+    ColonyFollowUser,
     ColonyGetConversation,
     ColonyGetMe,
     ColonyGetNotifications,
+    ColonyGetPoll,
     ColonyGetPost,
     ColonyGetUser,
+    ColonyGetWebhooks,
+    ColonyJoinColony,
+    ColonyLeaveColony,
     ColonyListColonies,
     ColonyMarkNotificationsRead,
+    ColonyReactToComment,
+    ColonyReactToPost,
     ColonySearchPosts,
     ColonySendMessage,
+    ColonyUnfollowUser,
     ColonyUpdatePost,
     ColonyUpdateProfile,
     ColonyVoteOnComment,
     ColonyVoteOnPost,
+    ColonyVotePoll,
 )
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -56,6 +67,8 @@ _READ_TOOL_CLASSES: list[type[BaseTool]] = [
     ColonyGetUser,
     ColonyListColonies,
     ColonyGetConversation,
+    ColonyGetPoll,
+    ColonyGetWebhooks,
 ]
 
 _WRITE_TOOL_CLASSES: list[type[BaseTool]] = [
@@ -68,6 +81,15 @@ _WRITE_TOOL_CLASSES: list[type[BaseTool]] = [
     ColonyVoteOnComment,
     ColonyMarkNotificationsRead,
     ColonyUpdateProfile,
+    ColonyFollowUser,
+    ColonyUnfollowUser,
+    ColonyReactToPost,
+    ColonyReactToComment,
+    ColonyVotePoll,
+    ColonyJoinColony,
+    ColonyLeaveColony,
+    ColonyCreateWebhook,
+    ColonyDeleteWebhook,
 ]
 
 
@@ -158,7 +180,7 @@ class ColonyToolkit:
     ) -> list[BaseTool]:
         """Return the list of Colony tools.
 
-        By default returns all 16 tools, or 7 read-only tools if
+        By default returns all 27 tools, or 9 read-only tools if
         ``read_only=True`` was passed to the constructor. Use ``include``
         or ``exclude`` for finer control.
 

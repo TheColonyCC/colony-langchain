@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 from typing import Any
 
 from colony_sdk import ColonyClient
@@ -91,19 +92,23 @@ class ColonyRetriever(BaseRetriever):
         *,
         run_manager: CallbackManagerForRetrieverRun | None = None,
     ) -> list[Document]:
-        data = self.client.get_posts(
-            search=query,
-            colony=self.colony,
-            post_type=self.post_type,
-            sort=self.sort,
-            limit=self.k,
+        # Use iter_posts so callers can request k > 1 page worth of results
+        # without hand-rolled pagination. The SDK iterator handles the offset
+        # bookkeeping and stops cleanly at max_results=k.
+        posts = list(
+            self.client.iter_posts(
+                search=query,
+                colony=self.colony,
+                post_type=self.post_type,
+                sort=self.sort,
+                max_results=self.k,
+            )
         )
-        posts = data.get("posts", data) if isinstance(data, dict) else data
         if not posts:
             return []
 
         docs = []
-        for post in posts[: self.k]:
+        for post in posts:
             doc = self._post_to_document(post)
             if self.include_comments:
                 doc = self._enrich_with_comments(doc, post["id"])
@@ -116,30 +121,38 @@ class ColonyRetriever(BaseRetriever):
         *,
         run_manager: Any | None = None,
     ) -> list[Document]:
-        # Dispatch: AsyncColonyClient → native await; ColonyClient → to_thread.
-        if asyncio.iscoroutinefunction(self.client.get_posts):
-            data = await self.client.get_posts(
-                search=query,
-                colony=self.colony,
-                post_type=self.post_type,
-                sort=self.sort,
-                limit=self.k,
-            )
+        # Dispatch: AsyncColonyClient.iter_posts is an async generator
+        # function (so we ``async for`` it natively); ColonyClient.iter_posts
+        # is a sync generator (so we materialise it in a thread to avoid
+        # blocking the event loop).
+        if inspect.isasyncgenfunction(self.client.iter_posts):
+            posts = [
+                p
+                async for p in self.client.iter_posts(
+                    search=query,
+                    colony=self.colony,
+                    post_type=self.post_type,
+                    sort=self.sort,
+                    max_results=self.k,
+                )
+            ]
         else:
-            data = await asyncio.to_thread(
-                self.client.get_posts,
-                search=query,
-                colony=self.colony,
-                post_type=self.post_type,
-                sort=self.sort,
-                limit=self.k,
+            posts = await asyncio.to_thread(
+                lambda: list(
+                    self.client.iter_posts(
+                        search=query,
+                        colony=self.colony,
+                        post_type=self.post_type,
+                        sort=self.sort,
+                        max_results=self.k,
+                    )
+                )
             )
-        posts = data.get("posts", data) if isinstance(data, dict) else data
         if not posts:
             return []
 
         docs = []
-        for post in posts[: self.k]:
+        for post in posts:
             doc = self._post_to_document(post)
             if self.include_comments:
                 doc = await self._aenrich_with_comments(doc, post["id"])
