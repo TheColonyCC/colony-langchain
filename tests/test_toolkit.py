@@ -31,34 +31,58 @@ def _tools_by_name():
 
 
 class TestToolkit:
-    def test_get_tools_returns_all_sixteen(self):
+    def test_get_tools_returns_all(self):
+        """Toolkit ships 27 tools across the SDK 1.5.0 surface — 9 read +
+        18 write. ColonyVerifyWebhook is intentionally NOT in the registry
+        (instantiate directly when you need it, like ColonyRegister)."""
         toolkit = _make_toolkit()
         tools = toolkit.get_tools()
-        assert len(tools) == 16
+        assert len(tools) == 27
         names = {t.name for t in tools}
         assert names == {
+            # Read (9)
             "colony_search_posts",
             "colony_get_post",
-            "colony_create_post",
-            "colony_comment_on_post",
-            "colony_vote_on_post",
-            "colony_send_message",
             "colony_get_notifications",
             "colony_get_me",
             "colony_get_user",
             "colony_list_colonies",
             "colony_get_conversation",
+            "colony_get_poll",
+            "colony_get_webhooks",
+            # Write (18)
+            "colony_create_post",
+            "colony_comment_on_post",
+            "colony_vote_on_post",
+            "colony_send_message",
             "colony_update_post",
             "colony_delete_post",
             "colony_vote_on_comment",
             "colony_mark_notifications_read",
             "colony_update_profile",
+            "colony_follow_user",
+            "colony_unfollow_user",
+            "colony_react_to_post",
+            "colony_react_to_comment",
+            "colony_vote_poll",
+            "colony_join_colony",
+            "colony_leave_colony",
+            "colony_create_webhook",
+            "colony_delete_webhook",
         }
 
-    def test_read_only_returns_seven(self):
+    def test_verify_webhook_not_in_toolkit(self):
+        """``ColonyVerifyWebhook`` is a standalone tool — not in ALL_TOOLS,
+        same pattern as ``ColonyRegister`` in crewai-colony. Webhook
+        verification is done in handler code, not by an LLM agent loop."""
+        toolkit = _make_toolkit()
+        names = {t.name for t in toolkit.get_tools()}
+        assert "colony_verify_webhook" not in names
+
+    def test_read_only_returns_nine(self):
         toolkit = _make_toolkit(read_only=True)
         tools = toolkit.get_tools()
-        assert len(tools) == 7
+        assert len(tools) == 9
         names = {t.name for t in tools}
         assert names == {
             "colony_search_posts",
@@ -68,6 +92,8 @@ class TestToolkit:
             "colony_get_user",
             "colony_list_colonies",
             "colony_get_conversation",
+            "colony_get_poll",
+            "colony_get_webhooks",
         }
 
     def test_include_filter(self):
@@ -83,7 +109,7 @@ class TestToolkit:
         names = {t.name for t in tools}
         assert "colony_delete_post" not in names
         assert "colony_update_profile" not in names
-        assert len(tools) == 14
+        assert len(tools) == 25
 
     def test_include_and_exclude_raises(self):
         toolkit = _make_toolkit()
@@ -105,7 +131,7 @@ class TestToolkit:
     def test_exclude_with_read_only(self):
         toolkit = _make_toolkit(read_only=True)
         tools = toolkit.get_tools(exclude=["colony_get_me"])
-        assert len(tools) == 6
+        assert len(tools) == 8
         assert "colony_get_me" not in {t.name for t in tools}
 
     def test_include_empty_list(self):
@@ -116,7 +142,7 @@ class TestToolkit:
     def test_exclude_empty_list(self):
         toolkit = _make_toolkit()
         tools = toolkit.get_tools(exclude=[])
-        assert len(tools) == 16
+        assert len(tools) == 27
 
     def test_include_nonexistent_name(self):
         toolkit = _make_toolkit()
@@ -155,6 +181,15 @@ class TestToolkit:
             "colony_delete_post",
             "colony_mark_notifications_read",
             "colony_update_profile",
+            "colony_follow_user",
+            "colony_unfollow_user",
+            "colony_react_to_post",
+            "colony_react_to_comment",
+            "colony_vote_poll",
+            "colony_join_colony",
+            "colony_leave_colony",
+            "colony_create_webhook",
+            "colony_delete_webhook",
         }
         for tool in toolkit.get_tools():
             if tool.name in write_names:
@@ -164,7 +199,11 @@ class TestToolkit:
 
     def test_tools_have_args_schema(self):
         # Tools that take no arguments have args_schema=None
-        no_args_tools = {"colony_get_me", "colony_mark_notifications_read"}
+        no_args_tools = {
+            "colony_get_me",
+            "colony_mark_notifications_read",
+            "colony_get_webhooks",
+        }
         toolkit = _make_toolkit()
         for tool in toolkit.get_tools():
             if tool.name in no_args_tools:
