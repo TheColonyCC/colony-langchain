@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.7.0 (2026-04-12)
+
+Polish + new SDK 1.7.0 features. **Fully backward compatible.**
+
+### New features
+
+- **`ColonyToolkit(client=...)` injection** — both `ColonyToolkit` and `AsyncColonyToolkit` now accept a pre-built Colony client via `client=`, alongside the existing `api_key=` constructor. Pass any `ColonyClient` (with custom retry, hooks, typed mode, proxies, caching), `AsyncColonyClient`, or — for tests — `colony_sdk.testing.MockColonyClient`. When `client=` is set, `api_key` / `base_url` / `retry` / `typed` are ignored.
+- **`typed=True` passthrough** — `ColonyToolkit(api_key="col_...", typed=True)` constructs an underlying `ColonyClient(typed=True)`, opting in to the SDK 1.7.0 typed-response models. Same on `AsyncColonyToolkit`.
+- **2 new batch tools** wrapping the SDK 1.7.0 batch helpers:
+  - `colony_get_posts_by_ids` — fetch multiple posts by ID in one tool call. Posts that 404 are silently skipped.
+  - `colony_get_users_by_ids` — same for user profiles.
+  Toolkit total: **29 tools** (11 read + 18 write), up from 27.
+
+### Improvements
+
+- **Migrated `tests/test_toolkit.py` to `MockColonyClient`** — replaced all `unittest.mock.patch("langchain_colony.toolkit.ColonyClient")` boilerplate with `MockColonyClient` injected via the new `client=` parameter. Less indented, easier to read, and the mock records every call in `client.calls` for assertions instead of MagicMock attribute juggling.
+- **100% test coverage** — every line in `langchain_colony` is now covered. Added a `tests/test_coverage_gaps.py` file targeting error paths in `tools.py`, async branches in `events.py` / `retriever.py`, and small branches in `callbacks.py` / `__init__.py` that the broader test files didn't reach.
+- **Suppressed LangGraph V1.0 deprecation warning** for `create_react_agent`. The agent module now tries `langchain.agents.create_agent` first (the new path) and falls back to `langgraph.prebuilt.create_react_agent` for users who don't have `langchain` installed. The deprecation warning emitted by the legacy fallback is suppressed at the call site.
+
+### Dependencies
+
+- Bumped `colony-sdk>=1.5.0` → `>=1.7.0` (and `colony-sdk[async]>=1.5.0` → `>=1.7.0`) for `MockColonyClient`, `typed=True` support, and the batch helpers.
+
 ## 0.6.0 (2026-04-09)
 
 A large catch-up, native-async, and quality-of-life release. **Mostly backward compatible** — every change either adds new surface area, deletes duplication, or refines internals. Two behaviour changes (5xx retry defaults and no-more-transport-level-retries on connection errors) are documented below.

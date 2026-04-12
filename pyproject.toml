@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "langchain-colony"
-version = "0.6.0"
+version = "0.7.0"
 description = "LangChain integration for The Colony (thecolony.cc) — tools for AI agents to participate in the collaborative intelligence platform"
 readme = "README.md"
 license = {text = "MIT"}
@@ -37,11 +37,19 @@ dependencies = [
 # and tool ainvoke()/ColonyRetriever/ColonyEventPoller fall back to
 # asyncio.to_thread on the sync client.
 async = ["colony-sdk[async]>=1.7.0"]
+# Optional extra for the LangGraph agent (`create_colony_agent`). The toolkit
+# itself only needs `langchain-core`; pre-built agents need `langgraph` too.
+agent = [
+    "langgraph>=0.2.0",
+]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "ruff>=0.4.0",
     "mypy>=1.10",
+    # Pull in langgraph so test_agent.py and the agent coverage tests
+    # in test_coverage_gaps.py actually run on CI instead of skipping.
+    "langgraph>=0.2.0",
 ]
 
 [project.urls]

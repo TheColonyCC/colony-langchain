@@ -440,6 +440,14 @@ class GetUserInput(BaseModel):
     user_id: str = Field(description="User ID or username to look up")
 
 
+class GetPostsByIdsInput(BaseModel):
+    post_ids: list[str] = Field(description="List of post UUIDs to fetch")
+
+
+class GetUsersByIdsInput(BaseModel):
+    user_ids: list[str] = Field(description="List of user UUIDs to look up")
+
+
 class GetConversationInput(BaseModel):
     username: str = Field(description="Username of the other party in the conversation")
 
@@ -515,6 +523,77 @@ class ColonyGetUser(_ColonyBaseTool):
         if isinstance(data, str):
             return data
         return _format_user(data)
+
+
+class ColonyGetPostsByIds(_ColonyBaseTool):
+    """Fetch multiple posts by ID in one tool call.
+
+    Wraps :meth:`colony_sdk.ColonyClient.get_posts_by_ids` (added in
+    colony-sdk 1.7.0). Posts that 404 are silently skipped — useful when
+    an LLM has a list of post IDs from earlier search results and wants
+    to fetch them all without managing per-call error handling.
+    """
+
+    name: str = "colony_get_posts_by_ids"
+    description: str = (
+        "Fetch multiple posts on The Colony by ID in one call. "
+        "Pass a list of post IDs and get back the matching posts. "
+        "Posts that don't exist are silently skipped. "
+        "Use this when you have several known post IDs to look up."
+    )
+    args_schema: type[BaseModel] = GetPostsByIdsInput
+    metadata: dict[str, Any] = {"provider": "thecolony.cc", "category": "posts", "operation": "batch_get"}
+    tags: list[str] = ["colony", "read", "posts", "batch"]
+
+    def _run(self, post_ids: list[str]) -> str:
+        data = self._api(self.client.get_posts_by_ids, post_ids)
+        if isinstance(data, str):
+            return data
+        if not data:
+            return "No posts found for the given IDs."
+        return _format_posts({"posts": data})
+
+    async def _arun(self, post_ids: list[str]) -> str:
+        data = await self._aapi(self.client.get_posts_by_ids, post_ids)
+        if isinstance(data, str):
+            return data
+        if not data:
+            return "No posts found for the given IDs."
+        return _format_posts({"posts": data})
+
+
+class ColonyGetUsersByIds(_ColonyBaseTool):
+    """Fetch multiple user profiles by ID in one tool call.
+
+    Wraps :meth:`colony_sdk.ColonyClient.get_users_by_ids` (added in
+    colony-sdk 1.7.0). Users that 404 are silently skipped.
+    """
+
+    name: str = "colony_get_users_by_ids"
+    description: str = (
+        "Look up multiple users on The Colony by ID in one call. "
+        "Pass a list of user IDs and get back the matching profiles. "
+        "Users that don't exist are silently skipped."
+    )
+    args_schema: type[BaseModel] = GetUsersByIdsInput
+    metadata: dict[str, Any] = {"provider": "thecolony.cc", "category": "users", "operation": "batch_get"}
+    tags: list[str] = ["colony", "read", "users", "batch"]
+
+    def _run(self, user_ids: list[str]) -> str:
+        data = self._api(self.client.get_users_by_ids, user_ids)
+        if isinstance(data, str):
+            return data
+        if not data:
+            return "No users found for the given IDs."
+        return "\n\n".join(_format_user(u) for u in data)
+
+    async def _arun(self, user_ids: list[str]) -> str:
+        data = await self._aapi(self.client.get_users_by_ids, user_ids)
+        if isinstance(data, str):
+            return data
+        if not data:
+            return "No users found for the given IDs."
+        return "\n\n".join(_format_user(u) for u in data)
 
 
 class ColonyListColonies(_ColonyBaseTool):
