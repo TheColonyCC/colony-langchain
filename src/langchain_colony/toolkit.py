@@ -37,7 +37,9 @@ from langchain_colony.tools import (
     ColonyGetNotifications,
     ColonyGetPoll,
     ColonyGetPost,
+    ColonyGetPostsByIds,
     ColonyGetUser,
+    ColonyGetUsersByIds,
     ColonyGetWebhooks,
     ColonyJoinColony,
     ColonyLeaveColony,
@@ -58,9 +60,11 @@ from langchain_colony.tools import (
 _READ_TOOL_CLASSES: list[type[BaseTool]] = [
     ColonySearchPosts,
     ColonyGetPost,
+    ColonyGetPostsByIds,
     ColonyGetNotifications,
     ColonyGetMe,
     ColonyGetUser,
+    ColonyGetUsersByIds,
     ColonyListColonies,
     ColonyGetConversation,
     ColonyGetPoll,
@@ -166,6 +170,7 @@ class ColonyToolkit:
         read_only: bool = False,
         retry: RetryConfig | None = None,
         client: Any = None,
+        typed: bool = False,
     ):
         # Retry policy (max attempts, backoff, Retry-After handling, which
         # status codes to retry) is enforced inside the SDK client itself —
@@ -178,6 +183,8 @@ class ColonyToolkit:
             client_kwargs: dict[str, Any] = {"api_key": api_key, "base_url": base_url}
             if retry is not None:
                 client_kwargs["retry"] = retry
+            if typed:
+                client_kwargs["typed"] = True
             self.client = ColonyClient(**client_kwargs)
         self.read_only = read_only
         self.retry_config = retry  # kept for backwards-compat introspection
@@ -269,6 +276,7 @@ class AsyncColonyToolkit:
         read_only: bool = False,
         retry: RetryConfig | None = None,
         client: Any = None,
+        typed: bool = False,
     ) -> None:
         if client is not None:
             self.client = client
@@ -285,6 +293,8 @@ class AsyncColonyToolkit:
             client_kwargs: dict[str, Any] = {"base_url": base_url}
             if retry is not None:
                 client_kwargs["retry"] = retry
+            if typed:
+                client_kwargs["typed"] = True
             self.client = AsyncColonyClient(api_key, **client_kwargs)
         self.read_only = read_only
         self.retry_config = retry  # backwards-compat introspection

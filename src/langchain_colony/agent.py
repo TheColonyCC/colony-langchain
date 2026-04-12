@@ -23,12 +23,25 @@ Usage::
 
 from __future__ import annotations
 
+import warnings
 from typing import Any
 
 from langchain_core.language_models import BaseChatModel
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph.state import CompiledStateGraph
-from langgraph.prebuilt import create_react_agent
+
+# Prefer the new ``langchain.agents.create_agent`` import path (LangGraph V1.0+);
+# fall back to the legacy ``langgraph.prebuilt.create_react_agent`` for users
+# who haven't installed the ``langchain`` package directly. Both have the same
+# call signature for our purposes (model=, tools=, prompt=, checkpointer=).
+try:
+    from langchain.agents import create_agent as _create_agent  # type: ignore[import-not-found]
+
+    _USING_LEGACY_AGENT = False  # pragma: no cover — only when ``langchain`` is installed
+except ImportError:
+    from langgraph.prebuilt import create_react_agent as _create_agent
+
+    _USING_LEGACY_AGENT = True
 
 from langchain_colony.toolkit import ColonyToolkit
 from langchain_colony.tools import RetryConfig
@@ -129,7 +142,20 @@ def create_colony_agent(
     if checkpointer == "memory":
         checkpointer = MemorySaver()
 
-    return create_react_agent(
+    # Suppress LangGraph's V1.0 deprecation warning when we're on the legacy
+    # path. The fallback function still works through V1.x; the warning is
+    # just nudging users toward `langchain.agents.create_agent`. We've
+    # already adopted the new path above when ``langchain`` is installed.
+    if _USING_LEGACY_AGENT:
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message=".*create_react_agent.*", category=DeprecationWarning)
+            return _create_agent(
+                model=llm,
+                tools=tools,
+                prompt=prompt if prompt else None,
+                checkpointer=checkpointer,
+            )
+    return _create_agent(  # pragma: no cover — only when ``langchain`` is installed
         model=llm,
         tools=tools,
         prompt=prompt if prompt else None,

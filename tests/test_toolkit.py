@@ -56,20 +56,22 @@ def _tools_by_name() -> tuple[dict[str, Any], MockColonyClient]:
 
 class TestToolkit:
     def test_get_tools_returns_all(self):
-        """Toolkit ships 27 tools across the SDK 1.5.0 surface — 9 read +
+        """Toolkit ships 29 tools across the SDK 1.7.0 surface — 11 read +
         18 write. ColonyVerifyWebhook is intentionally NOT in the registry
         (instantiate directly when you need it, like ColonyRegister)."""
         toolkit = _make_toolkit()
         tools = toolkit.get_tools()
-        assert len(tools) == 27
+        assert len(tools) == 29
         names = {t.name for t in tools}
         assert names == {
-            # Read (9)
+            # Read (11)
             "colony_search_posts",
             "colony_get_post",
+            "colony_get_posts_by_ids",
             "colony_get_notifications",
             "colony_get_me",
             "colony_get_user",
+            "colony_get_users_by_ids",
             "colony_list_colonies",
             "colony_get_conversation",
             "colony_get_poll",
@@ -103,17 +105,19 @@ class TestToolkit:
         names = {t.name for t in toolkit.get_tools()}
         assert "colony_verify_webhook" not in names
 
-    def test_read_only_returns_nine(self):
+    def test_read_only_returns_eleven(self):
         toolkit = _make_toolkit(read_only=True)
         tools = toolkit.get_tools()
-        assert len(tools) == 9
+        assert len(tools) == 11
         names = {t.name for t in tools}
         assert names == {
             "colony_search_posts",
             "colony_get_post",
+            "colony_get_posts_by_ids",
             "colony_get_notifications",
             "colony_get_me",
             "colony_get_user",
+            "colony_get_users_by_ids",
             "colony_list_colonies",
             "colony_get_conversation",
             "colony_get_poll",
@@ -133,7 +137,7 @@ class TestToolkit:
         names = {t.name for t in tools}
         assert "colony_delete_post" not in names
         assert "colony_update_profile" not in names
-        assert len(tools) == 25
+        assert len(tools) == 27
 
     def test_include_and_exclude_raises(self):
         toolkit = _make_toolkit()
@@ -155,7 +159,7 @@ class TestToolkit:
     def test_exclude_with_read_only(self):
         toolkit = _make_toolkit(read_only=True)
         tools = toolkit.get_tools(exclude=["colony_get_me"])
-        assert len(tools) == 8
+        assert len(tools) == 10
         assert "colony_get_me" not in {t.name for t in tools}
 
     def test_include_empty_list(self):
@@ -166,7 +170,7 @@ class TestToolkit:
     def test_exclude_empty_list(self):
         toolkit = _make_toolkit()
         tools = toolkit.get_tools(exclude=[])
-        assert len(tools) == 27
+        assert len(tools) == 29
 
     def test_include_nonexistent_name(self):
         toolkit = _make_toolkit()

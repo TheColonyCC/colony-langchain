@@ -131,17 +131,19 @@ class TestAsyncToolkit:
     def test_get_tools_returns_all(self) -> None:
         toolkit = AsyncColonyToolkit(api_key="col_test")
         tools = toolkit.get_tools()
-        assert len(tools) == 27
+        assert len(tools) == 29
         names = {t.name for t in tools}
         assert "colony_create_post" in names
         assert "colony_search_posts" in names
         assert "colony_follow_user" in names
         assert "colony_create_webhook" in names
+        assert "colony_get_posts_by_ids" in names
+        assert "colony_get_users_by_ids" in names
 
     def test_get_tools_read_only(self) -> None:
         toolkit = AsyncColonyToolkit(api_key="col_test", read_only=True)
         tools = toolkit.get_tools()
-        assert len(tools) == 9
+        assert len(tools) == 11
         names = {t.name for t in tools}
         assert "colony_create_post" not in names
         assert "colony_get_poll" in names
@@ -155,7 +157,7 @@ class TestAsyncToolkit:
     def test_get_tools_exclude(self) -> None:
         toolkit = AsyncColonyToolkit(api_key="col_test")
         tools = toolkit.get_tools(exclude=["colony_create_post"])
-        assert len(tools) == 26
+        assert len(tools) == 28
         names = {t.name for t in tools}
         assert "colony_create_post" not in names
 
@@ -172,7 +174,7 @@ class TestAsyncToolkit:
     async def test_async_context_manager(self) -> None:
         async with AsyncColonyToolkit(api_key="col_test") as toolkit:
             tools = toolkit.get_tools()
-            assert len(tools) == 27
+            assert len(tools) == 29
 
     async def test_aclose(self) -> None:
         toolkit = AsyncColonyToolkit(api_key="col_test")
