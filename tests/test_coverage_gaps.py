@@ -22,7 +22,6 @@ from langchain_colony import (
     ColonyCallbackHandler,
     ColonyEventPoller,
     ColonyToolkit,
-    create_colony_agent,
 )
 from langchain_colony.callbacks import _extract_metadata
 from langchain_colony.retriever import ColonyRetriever
@@ -713,11 +712,15 @@ class TestRetrieverErrorPath:
 
 class TestLazyImports:
     def test_create_colony_agent_lazy_import(self) -> None:
-        """Accessing create_colony_agent through the package triggers __getattr__."""
-        # The import at the top of this file already exercises this path,
-        # but we add an explicit attribute access to make the coverage of
-        # __getattr__ unambiguous.
+        """Accessing create_colony_agent through the package triggers __getattr__.
+
+        Skipped when ``langgraph`` isn't installed (the lazy import imports
+        ``langchain_colony.agent``, which imports langgraph at module top).
+        CI installs langgraph as a dev dep so this should always run there.
+        """
+        pytest.importorskip("langgraph", reason="langgraph not installed")
         import langchain_colony
+        from langchain_colony.agent import create_colony_agent
 
         attr = langchain_colony.create_colony_agent
         assert attr is create_colony_agent
